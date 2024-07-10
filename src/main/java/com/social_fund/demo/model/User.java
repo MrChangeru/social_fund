@@ -71,4 +71,3 @@ public class User {
         this.dateOfCreation = dateOfCreation;
     }
 }
-

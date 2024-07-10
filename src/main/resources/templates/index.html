@@ -1,35 +1,185 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
-    <title>Users</title>
+    <meta charset="UTF-8">
+    <title>Social Fund Dashboard</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css">
 </head>
 <body>
-<h1>Users</h1>
-<table>
-    <thead>
-    <tr>
-        <th>ID</th>
-        <th>Login</th>
-        <th>Last Name</th>
-        <th>First Name</th>
-        <th>Patronymic</th>
-        <th>Date of Birth</th>
-        <th>Email</th>
-        <th>Date of Creation</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr th:each="user : ${users}">
-        <td th:text="${user.id}">ID</td>
-        <td th:text="${user.login}">Login</td>
-        <td th:text="${user.lastName}">Last Name</td>
-        <td th:text="${user.firstName}">First Name</td>
-        <td th:text="${user.patronymic}">Patronymic</td>
-        <td th:text="${user.dateOfBirth}">Date of Birth</td>
-        <td th:text="${user.email}">Email</td>
-        <td th:text="${user.dateOfCreation}">Date of Creation</td>
-    </tr>
-    </tbody>
-</table>
+<div class="container">
+    <h1 class="mt-5">Social Fund Dashboard</h1>
+
+    <div class="mt-4">
+        <select id="tableSelect" class="form-control">
+            <option value="users">Users</option>
+            <option value="articles">Articles</option>
+            <option value="comments">Comments</option>
+        </select>
+    </div>
+
+    <div class="mt-4" id="filterContainer">
+        <!-- Filter inputs will be dynamically inserted here -->
+    </div>
+
+    <div class="mt-4">
+        <button id="exportButton" class="btn btn-primary">Export to Excel</button>
+    </div>
+
+    <div class="mt-4">
+        <table id="dataTable" class="table table-bordered">
+            <!-- Table content will be dynamically inserted here -->
+        </table>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        document.getElementById("exportButton").addEventListener("click", function () {
+            const type = document.getElementById("tableSelect").value;
+            window.location.href = "/export?type=" + type;
+        });
+
+        document.getElementById("tableSelect").addEventListener("change", function () {
+            const type = this.value;
+            createFilterInputs(type);
+            fetchTableData(type);
+        });
+
+        function createFilterInputs(type) {
+            const filterContainer = document.getElementById("filterContainer");
+            filterContainer.innerHTML = "";
+
+            let filters = [];
+            switch (type) {
+                case "users":
+                    filters = ["ID", "Login", "Last Name", "First Name", "Patronymic", "Date of Birth", "Email", "Date of Creation"];
+                    break;
+                case "articles":
+                    filters = ["ID", "Title", "Content", "Author ID", "Date of Creation"];
+                    break;
+                case "comments":
+                    filters = ["ID", "Article ID", "User ID", "Content", "Date of Creation"];
+                    break;
+            }
+
+            filters.forEach(filter => {
+                const div = document.createElement("div");
+                div.classList.add("form-group");
+                const label = document.createElement("label");
+                label.textContent = filter;
+
+                if (filter.includes("Date")) {
+                    const select = document.createElement("select");
+                    select.classList.add("form-control");
+                    select.setAttribute("data-filter", filter);
+                    select.innerHTML = `
+                            <option value="">Select Period</option>
+                            <option value="day">Last Day</option>
+                            <option value="week">Last Week</option>
+                            <option value="month">Last Month</option>
+                            <option value="year">Last Year</option>
+                            <option value="custom">Custom Period</option>
+                        `;
+                    select.addEventListener("change", function() {
+                        if (this.value === "custom") {
+                            const customDiv = document.createElement("div");
+                            customDiv.classList.add("form-group", "custom-date-range");
+
+                            const startDateLabel = document.createElement("label");
+                            startDateLabel.textContent = "Start Date";
+                            const startDateInput = document.createElement("input");
+                            startDateInput.classList.add("form-control", "date-picker");
+                            startDateInput.setAttribute("data-filter", filter + "_start");
+
+                            const endDateLabel = document.createElement("label");
+                            endDateLabel.textContent = "End Date";
+                            const endDateInput = document.createElement("input");
+                            endDateInput.classList.add("form-control", "date-picker");
+                            endDateInput.setAttribute("data-filter", filter + "_end");
+
+                            customDiv.appendChild(startDateLabel);
+                            customDiv.appendChild(startDateInput);
+                            customDiv.appendChild(endDateLabel);
+                            customDiv.appendChild(endDateInput);
+
+                            div.appendChild(customDiv);
+                            $('.date-picker').datepicker({
+                                format: 'yyyy-mm-dd'
+                            });
+                        } else {
+                            const customDiv = div.querySelector(".custom-date-range");
+                            if (customDiv) {
+                                customDiv.remove();
+                            }
+                        }
+                    });
+
+                    div.appendChild(label);
+                    div.appendChild(select);
+                } else {
+                    const input = document.createElement("input");
+                    input.classList.add("form-control");
+                    input.setAttribute("data-filter", filter);
+                    div.appendChild(label);
+                    div.appendChild(input);
+                }
+
+                filterContainer.appendChild(div);
+            });
+
+            const filterButton = document.createElement("button");
+            filterButton.classList.add("btn", "btn-secondary");
+            filterButton.textContent = "Filter";
+            filterButton.addEventListener("click", function () {
+                fetchTableData(type);
+            });
+            filterContainer.appendChild(filterButton);
+        }
+
+        function fetchTableData(type) {
+            const filters = {};
+            document.querySelectorAll("#filterContainer [data-filter]").forEach(input => {
+                filters[input.getAttribute("data-filter")] = input.value;
+            });
+
+            fetch('/api/' + type + '?' + new URLSearchParams(filters))
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.getElementById("dataTable");
+                    table.innerHTML = "";
+
+                    if (data.length === 0) {
+                        table.innerHTML = "<tr><td>No data available</td></tr>";
+                        return;
+                    }
+
+                    const headers = Object.keys(data[0]);
+                    const thead = table.createTHead();
+                    const headerRow = thead.insertRow();
+
+                    headers.forEach(header => {
+                        const th = document.createElement("th");
+                        th.textContent = header;
+                        headerRow.appendChild(th);
+                    });
+
+                    const tbody = table.createTBody();
+                    data.forEach(item => {
+                        const row = tbody.insertRow();
+                        headers.forEach(header => {
+                            const cell = row.insertCell();
+                            cell.textContent = item[header];
+                        });
+                    });
+                });
+        }
+
+        createFilterInputs("users");
+        fetchTableData("users");
+    });
+</script>
 </body>
 </html>
